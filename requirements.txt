@@ -1,0 +1,19 @@
+# Core ML
+scikit-learn>=1.3.0
+catboost>=1.2
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Explainability & Trustworthy AI
+shap>=0.42.0
+dice-ml>=0.11
+mapie>=0.8.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+missingno>=0.5.2
+
+# Jupyter
+jupyter>=1.0.0
+ipykernel>=6.0.0
