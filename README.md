@@ -1,70 +1,58 @@
-# Trustworthy Heart Failure Prediction: Uncertainty Quantification & Responsible AI Audit
+# Trustworthy Heart Disease Prediction: Uncertainty Quantification & Responsible AI Audit
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Scikit-Learn](https://img.shields.io/badge/ML-Scikit--Learn-orange.svg)](https://scikit-learn.org/)
-[![XAI](https://img.shields.io/badge/XAI-SHAP%20·%20DiCE%20·%20MAPIE-blueviolet.svg)](#explainability--trustworthy-ai-suite)
+[![XAI](https://img.shields.io/badge/XAI-SHAP%20·%20DiCE%20·%20MAPIE-blueviolet.svg)](#trustworthy-ai-suite)
 
 ## Research Context
 
-Standard machine learning pipelines for clinical risk prediction typically report a single accuracy metric and treat the model as a black box. In high-stakes medical settings, this is insufficient — clinicians need to understand *why* a prediction was made, *what would need to change* for a different outcome, and *how confident* the model actually is.
+Clinical risk models are usually reported with one accuracy number. That is not enough in practice: a clinician also needs to know *why* the model made a prediction, *how sure* it is, *whether it works equally well for different patient groups*, and *what would change* the outcome.
 
-This project develops a **rigorously calibrated** heart failure prediction pipeline and subjects it to a **systematic responsible-AI evaluation**, demonstrating that high aggregate accuracy alone is insufficient for trustworthy clinical deployment.
+This project builds a heart disease risk model and then audits it on all four of these questions.
 
-## Architecture
+## Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DATA PREPROCESSING                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐    │
-│  │ KNN Imputer  │→ │ RobustScaler │→ │ ColumnTransformer │    │
-│  │ (missing     │  │ (outlier-    │  │ (categorical +    │    │
-│  │  values)     │  │  resistant)  │  │  numerical)       │    │
-│  └──────────────┘  └──────────────┘  └───────────────────┘    │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│                    STACKED ENSEMBLE                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐     │
-│  │ Random Forest│  │   CatBoost   │  │      SVM         │     │
-│  │  (Base 1)    │  │  (Base 2)    │  │   (Base 3)       │     │
-│  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘     │
-│         └──────────────────┼───────────────────┘               │
-│                    ┌───────▼───────┐                           │
-│                    │   Logistic    │                           │
-│                    │  Regression   │                           │
-│                    │ (Meta-Learner)│                           │
-│                    └───────┬───────┘                           │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-┌────────────────────────────▼────────────────────────────────────┐
-│              TRUSTWORTHY AI EVALUATION SUITE                   │
-│                                                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐     │
-│  │     SHAP     │  │     DiCE     │  │      MAPIE       │     │
-│  │  (Why this   │  │ (What would  │  │  (How confident  │     │
-│  │  prediction?)│  │  change it?) │  │  is the model?)  │     │
-│  └──────────────┘  └──────────────┘  └──────────────────┘     │
-└─────────────────────────────────────────────────────────────────┘
+Data audit ──> Preprocessing ──> Stacking ensemble ──> Conformal calibration ──> Audit suite
+                                                                                  ├─ SHAP (why?)
+                                                                                  ├─ MAPIE (how sure?)
+                                                                                  ├─ Sex-stratified recall (fair?)
+                                                                                  └─ DiCE (what would change it?)
 ```
 
-## Key Results
+- **Data audit:** missingness, correlation, category balance, leakage check, random record review
+- **Cleaning:** 172 records with `Cholesterol = 0` (not physiologically possible) are treated as missing, not as real values
+- **Feature engineering:** heart-rate reserve (`220 − Age − MaxHR`)
+- **Preprocessing:** KNN imputation + RobustScaler (numeric), ordinal encoding (ST slope, exercise angina), one-hot encoding (chest pain type, resting ECG, sex)
+- **Model:** stacking ensemble of CatBoost, Random Forest and Logistic Regression, with a Logistic Regression meta-learner
+- **Split:** 50% train / 25% conformal calibration / 25% held-out test, all stratified
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **ROC-AUC** | 0.936 | Stacked Ensemble (RF + CatBoost + LR) |
-| **Accuracy** | 87.5% | 5-fold stratified cross-validation |
-| **Precision** | 0.89 | Weighted average across classes |
-| **Recall** | 0.88 | Weighted average across classes |
+## Results (held-out test set, n = 230)
 
-### Explainability & Trustworthy AI Suite
+| Metric | Value |
+|--------|-------|
+| ROC-AUC | 0.936 |
+| Accuracy | 0.878 |
+| Precision | 0.890 |
+| Recall | 0.890 |
+| F1 | 0.890 |
 
-| Method | Purpose | Key Finding |
-|--------|---------|-------------|
-| **SHAP** (Global) | Feature importance ranking | Ejection fraction, serum creatinine, and time dominate predictions — consistent with clinical cardiology literature |
-| **SHAP** (Local) | Patient-level explanation | Individual force plots reveal per-patient risk drivers for clinical communication |
-| **DiCE** (Counterfactuals) | Actionable "what-if" scenarios | ⚠️ Exposed a **critical failure mode**: model generated biologically impossible interventions (e.g., reducing age by 20 years), motivating human-in-the-loop oversight |
-| **MAPIE** (Conformal Prediction) | Calibrated uncertainty intervals | Replaces point predictions with distribution-free, coverage-guaranteed intervals at 95% confidence |
+Meta-learner weights: CatBoost 2.51, Logistic Regression 1.68, Random Forest 1.59.
+
+## Trustworthy AI Suite
+
+| Check | Method | What it showed |
+|-------|--------|----------------|
+| Uncertainty | MAPIE split conformal prediction (α = 0.1) | Returns a prediction *set* with a 90% coverage target instead of a single label |
+| Fairness | Recall by sex | Male 89.1% vs female 87.5%, within the 5-point threshold. Note: only 193 of 918 patients are female |
+| Explanation | SHAP (permutation explainer on the full pipeline) | Global importance and per-feature direction of effect |
+| Counterfactuals | DiCE, varying only resting BP, cholesterol and max HR | For test patient 311, DiCE suggested *raising* resting BP by 17 mmHg and max HR by 78 bpm. Mathematically valid, but not clinically sensible. This is why counterfactual output needs clinical constraints and human review before it reaches a patient |
+| Calibration | Reliability curve | Included in the notebook |
+
+## Dataset
+
+[Heart Failure Prediction dataset](https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction) (fedesoriano, Kaggle): 918 patients and 11 clinical features, combined from five UCI heart disease cohorts. The target is `HeartDisease` (0/1).
 
 ## Project Structure
 
@@ -73,85 +61,32 @@ Heart-Failure-Prediction/
 ├── README.md
 ├── LICENSE
 ├── requirements.txt
-├── .gitignore
 ├── notebooks/
 │   └── trustworthy_heart_failure_prediction.ipynb   # Full pipeline
 └── data/
-    └── heart_failure.csv                            # UCI Heart Failure Dataset
+    └── heart_failure.csv
 ```
 
 ## Getting Started
 
-### Prerequisites
-- Python 3.8+
-- pip or conda
-
-### Installation
-
 ```bash
-# Clone the repository
 git clone https://github.com/vinati24/Heart-Failure-Prediction.git
 cd Heart-Failure-Prediction
-
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# venv\Scripts\activate   # Windows
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Launch notebook
 jupyter notebook notebooks/trustworthy_heart_failure_prediction.ipynb
 ```
 
-## Methodology
+## Limitations
 
-### 1. Exploratory Data Analysis
-- Missing value analysis using `missingno` correlation matrices
-- Statistical distribution checks and outlier identification
-- Feature correlation analysis
-
-### 2. Preprocessing Pipeline
-- `ColumnTransformer` for automated scaling (RobustScaler) and encoding
-- KNN Imputation for clinically-informed missing value handling
-- Stratified train/test split preserving class distribution
-
-### 3. Model Development
-- Individual base learners: Random Forest, CatBoost, SVM
-- `StackingClassifier` with Logistic Regression meta-learner
-- Hyperparameter tuning via cross-validation
-
-### 4. Responsible AI Evaluation
-- **SHAP**: TreeExplainer for global feature importance (summary plots) and local explanations (force plots, waterfall plots)
-- **DiCE**: Diverse counterfactual generation revealing actionable vs. impossible interventions
-- **MAPIE**: Conformal prediction intervals providing mathematically rigorous uncertainty bounds
-
-## Dataset
-
-The dataset is derived from the [UCI Heart Failure Clinical Records](https://archive.ics.uci.edu/ml/datasets/Heart+failure+clinical+records) dataset, containing 299 patient records with 13 clinical features including ejection fraction, serum creatinine, age, anaemia status, and follow-up time.
-
-## Citation
-
-If you use this work in your research, please cite:
-
-```bibtex
-@misc{nathwani2024trustworthy,
-  author = {Nathwani, Vinati},
-  title = {Trustworthy Heart Failure Prediction: Uncertainty Quantification and Responsible AI Audit},
-  year = {2024},
-  publisher = {GitHub},
-  url = {https://github.com/vinati24/Heart-Failure-Prediction}
-}
-```
+- Single public dataset; no external validation cohort
+- Conformal coverage is guaranteed on average, not for each subgroup
+- The fairness check covers sex only, and the female subgroup is small
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+MIT. See [LICENSE](LICENSE).
 
 ## Author
 
-**Vinati Nathwani**
-- MSc AI for Biomedicine and Healthcare — University College London (UCL)
-- BTech Computer Science (Health Informatics) — VIT Bhopal
-- [GitHub](https://github.com/vinati24) · [LinkedIn](https://linkedin.com/in/vinati-nathwani-42b622260)
+**Vinati Nathwani**, MSc AI for Biomedicine and Healthcare, UCL · BTech CSE (Health Informatics), VIT Bhopal
+[GitHub](https://github.com/vinati24) · [LinkedIn](https://linkedin.com/in/vinati-nathwani-42b622260)
